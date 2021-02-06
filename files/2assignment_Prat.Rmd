@@ -1,0 +1,452 @@
+---
+title: "2nd assignment"
+author: "Joan Prat Sicart"
+date: "4/24/2019"
+output: html_document
+---
+
+#PREPARE THE DATA
+
+Import all the dataset get rid of the uninteresting columns and finally bind between them with their respective years 
+
+```{r}
+#import the datasets
+marathon_2015 <- read.csv("marathon_results_2015.csv", header = TRUE, na.strings="", stringsAsFactors=FALSE)
+
+marathon_2016 <- read.csv("marathon_results_2016.csv", header = TRUE, na.strings="", stringsAsFactors=FALSE)
+
+marathon_2017 <- read.csv("marathon_results_2017.csv", header = TRUE, na.strings="", stringsAsFactors=FALSE)
+#remember that = can be replaced by <-
+# ()for function/ [object to found , colum] for a dataset (marathon$X5K is the same marathon[,"X5K"])
+
+#exclude X1 from marathon marathon_2015 and marathon_2017 
+marathon_2015 <-subset(marathon_2015, select = -c( X.1) )
+marathon_2017 <-subset(marathon_2017, select = -c( X.1) )
+
+```
+
+Merge the three datasets into one called marathon, but before introduce the year as a colum to then be able to diferentiate among the diffrents marathons
+
+```{r}
+#add year colimn 
+marathon_2015$Year = 2015
+marathon_2016$Year = 2016
+marathon_2017$Year = 2017
+
+#merge the datasets
+marathon = rbind(marathon_2015, marathon_2016, marathon_2017)
+
+#delete the unnecessary tables
+rm(marathon_2015, marathon_2016, marathon_2017)
+```
+
+Make sure that there aren't runners in the datasets without the time of one partial, becasuse it's considered that has cheated.
+
+```{r}
+#get the number of rows with all the partials completed 
+
+#marathon =  subset( marathon,!marathon$X5K == "-" && !marathon$X10K== "-" && !marathon$X15K == "-" && !marathon$X20K== "-" && !marathon$X25K== "-" && !marathon$X30K== "-" && !marathon$X35K== "-" && !marathon$X40K== "-" || !marathon$Official.Time== "-")
+
+
+```
+
+```{r}
+marathon = marathon[!marathon$X5K == "-",]
+marathon = marathon[!marathon$X10K == "-",]
+marathon = marathon[!marathon$X15K == "-",]
+marathon = marathon[!marathon$X20K == "-",]
+marathon = marathon[!marathon$Half == "-",]
+marathon = marathon[!marathon$X25K == "-",]
+marathon = marathon[!marathon$X30K == "-",]
+marathon = marathon[!marathon$X35K == "-",]
+marathon = marathon[!marathon$X40K == "-",]
+marathon = marathon[!marathon$Official.Time == "-",]
+```
+
+Replace tha M value for 0 and F for 1, tranform the times to seconds, and countries to codes.
+
+```{r}
+#tranform M/F into numbers 
+marathon$M.F[marathon$M.F == "M"]=0 
+marathon$M.F[marathon$M.F == "F"]=1
+
+#transform into seconds the times
+library(lubridate)
+marathon$X5K <- period_to_seconds(hms(marathon$X5K))
+marathon$X10K <- period_to_seconds(hms(marathon$X10K))
+marathon$X15K <- period_to_seconds(hms(marathon$X15K))
+marathon$X20K <- period_to_seconds(hms(marathon$X20K))
+marathon$X25K <- period_to_seconds(hms(marathon$X25K))
+marathon$X30K <- period_to_seconds(hms(marathon$X30K))
+marathon$X35K <- period_to_seconds(hms(marathon$X35K))
+marathon$X40K <- period_to_seconds(hms(marathon$X40K))
+marathon$Official.Time <- period_to_seconds(hms(marathon$Official.Time))
+
+#Convert the contries in numbers
+library(countrycode)
+library(plyr)
+marathon$Country <- countrycode(marathon[, "Country"], "ioc", "genc3n", nomatch = NULL)
+marathon$Country <- mapvalues(marathon[, "Country"], from=c("FLK", "SIN", "TCA", "TRI", "TWN"), to=c("246", "702", "796", "780", "158")) #because the function doesn't convert those types
+
+```
+
+We will introduce the temperature variable in function with the day that had been runned the marathon, to do so, as we don't have specifics range of hours we will introduce the average temperature in Fº for each day, Therefore, for the 2015 year the average temperature was 47, for the 2016 year was 55, and finally, for the 2017 year was 61
+
+```{r}
+
+# Add temperature as a variable
+marathon [marathon$Year == 2015, "Temperature"]=46 
+marathon [marathon$Year == 2016, "Temperature"]=55 
+marathon [marathon$Year == 2017,"Temperature"]=62 
+
+```
+
+To simplify also the things we will exclude also the variables without interest
+
+```{r}
+#exclude the variables without interest
+marathon <-subset(marathon, select = -c(X, Half, Overall, Gender, Pace, City, State, Name, Proj.Time, Citizen) )
+```
+
+As we've considered that don't have the same behaviour the all the runners, for instance the elite group follow a continuos pace during the race while the amateurs their pace change during the race, we are going to select the elite group and work with it.
+
+In comparison with the female gender, for the male gender there isn't any indicator to distinguish among elite and amateur runners, so we'll get the percentatge of female runners and assume that there is the same percentage for the male.
+
+```{r}
+#Make a table with the elite female
+
+marathon_elite_female = marathon[marathon$M.F == 1 & substr(marathon$Bib, start = 1, stop = 1) == "F" & (marathon$Age >= 20 & marathon$Age <= 40),]
+
+# Get the percentaje of elite female runners
+
+female_elite = sum(marathon$M.F == 1 & substr(marathon$Bib, start = 1, stop = 1) == "F")
+female_amateur = sum(marathon$M.F == 1 & substr(marathon$Bib, start = 1, stop = 1) != "F")
+percentage_elite = female_elite / (female_elite+female_amateur)
+
+#Make a table with the elite male considering thta the percentatge among elite and amateur is the same as the female runners
+
+marathon_elite_male = marathon[marathon$M.F == 0 & (marathon$Age >= 20 & marathon$Age <= 40),]
+# sort them in function with the final time
+marathon_elite_male = marathon_elite_male[order(marathon_elite_male$Official.Time),] 
+# get the first X% of male runners
+marathon_elite_male = head(marathon_elite_male, floor(nrow(marathon_elite_male)*percentage_elite)) 
+#Join the two tales (elite_male, elite_female)
+marathon_elite = rbind(marathon_elite_female, marathon_elite_male) 
+#remove unncessary tables
+rm(marathon_elite_female, marathon_elite_male)
+```
+
+make sure that all the values are integers and there isn't rows with one of the value null
+
+```{r}
+
+marathon_elite <-subset(marathon_elite, select = -c(Bib) )
+
+#Make sure that all the values are numeric
+character_vars <- lapply(marathon_elite, class) == "character"
+marathon_elite[, character_vars] <- lapply(marathon_elite[, character_vars], as.numeric)
+
+#Make sure that there aren't rows with a null value
+#marathon_elite <- data.frame(t(na.omit(t(marathon_elite)))) 
+#// to omit those columns that have null values to avoid problems with the null (in partiuclar are Country  and Bib) but is better to delete those rows that have that fields null.
+marathon_elite <- na.omit(marathon_elite)
+```
+
+#PCA
+
+execute the Principal Component Analisis in order to visualize the different relations in the dataset with the variables already choosen.
+
+```{r}
+# PCA
+
+marathon_elite.pca <- prcomp(marathon_elite, center = TRUE,scale. = TRUE) # center and scale the data
+summary(marathon_elite.pca)
+
+# Plot the PCA
+library(ggfortify)
+autoplot(marathon_elite.pca, data = marathon_elite, loadings = TRUE, loadings.label = TRUE)
+```
+
+Observing the PCA, we can conclude that, as it was normal, the partial times are strongly related with the other partial times, the official time, the bib and the ranking of the runners, however, that kind of information won't be given to us when modelling the behaviour of a runner, since that are dates that aren't known previously of the simulation. Looking to the ohter variables we can see that the factors that have more impact on the partial results are the gender and the age, but temperature don't have a strong relation with the first partial for instance, however we are going to check how is better the model, with the temperature or without it.
+
+
+#LINEAR MODEL
+
+Linear model for the first partial X5K
+
+```{r}
+l_model = lm(X5K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+
+#As we have already annunced previously looking in the PCA Temperature don't have  a strong relation with the first partial times since the p-value is greater than 0.05, which is logical, since that in the first km don't influence too much the weather, therefore, it's necessary make another model without the Temperature
+
+
+#0 - 5Km linear model for all the marathon 
+l_model = lm(X5K ~ M.F + Country , data = marathon_elite)
+summary(l_model)
+```
+
+Linear model for the second partial 
+
+```{r}
+marathon_elite$X5K_X10K = marathon_elite$X10K - marathon_elite$X5K
+l_model = lm(X5K_X10K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 5-10 km final linear model
+l_model = lm(X5K_X10K ~ M.F + Country , data = marathon_elite)
+summary(l_model)
+
+```
+
+Linear model for the third partial 
+
+```{r}
+marathon_elite$X10K_X15K = marathon_elite$X15K - marathon_elite$X10K 
+l_model = lm(X10K_X15K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 10-15 km final linear model
+l_model = lm(X10K_X15K ~ M.F + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+```
+
+Linear model for the fourth partial
+
+```{r}
+marathon_elite$X15K_X20K = marathon_elite$X20K - marathon_elite$X15K 
+l_model = lm(X15K_X20K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 15 - 20 km linear model 
+l_model = lm(X15K_X20K ~ M.F + Country, data = marathon_elite)
+summary(l_model)
+
+```
+
+Linear model for the fifth partial
+
+```{r}
+marathon_elite$X20K_X25K = marathon_elite$X25K - marathon_elite$X20K 
+l_model = lm(X20K_X25K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 20 - 25 km linear model 
+l_model = lm(X20K_X25K ~ M.F + Country, data = marathon_elite)
+summary(l_model)
+```
+
+Linear model for the sixth partial
+
+```{r}
+marathon_elite$X25K_X30K = marathon_elite$X30K - marathon_elite$X25K 
+l_model = lm(X25K_X30K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 25 - 30 km linear model 
+l_model = lm(X25K_X30K ~ M.F + Country, data = marathon_elite)
+summary(l_model)
+
+```
+
+Linear model for the seventh partial
+
+```{r}
+marathon_elite$X30K_X35K = marathon_elite$X35K - marathon_elite$X30K 
+l_model = lm(X30K_X35K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 30 - 35 km linear model
+l_model = lm(X30K_X35K ~ M.F + Country, data = marathon_elite)
+summary(l_model)
+
+```
+
+
+Linear model for the eighth partial
+
+```{r}
+marathon_elite$X35K_X40K = marathon_elite$X40K - marathon_elite$X35K 
+l_model = lm(X35K_X40K ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 35 - 40 km linear model 
+l_model = lm(X35K_X40K ~ M.F  + Country, data = marathon_elite)
+summary(l_model)
+
+```
+
+Linear model for the ninenth partial
+
+```{r}
+marathon_elite$X40K_Final = marathon_elite$Official.Time - marathon_elite$X40K 
+l_model = lm(X40K_Final ~ M.F + Age + Temperature + Country, data = marathon_elite)
+summary(l_model)
+
+# 40 - Final km linear model
+l_model = lm(X40K_Final ~ M.F  + Country , data = marathon_elite)
+summary(l_model)
+```
+
+As we can see in all the final models all the factors have a low p-value, even the intercept, which means that all the values in the linear model are important when modelling the behavior of the partial times, moreover, the adusjtest r square has also a good value and therefore the model is quite accurate.
+
+#VALIDE THE LINEAR MODELS OBTAINED
+
+Finally we'll be necessary validate the linear models by checking the homoscedasticity, the independence, and the normal distribution of the data 
+
+```{r}
+# Test Linear Model hypothesis
+#Durbin Watson (independent)
+library("lmtest")
+dwtest(l_model, alternative ="two.sided")
+#Shapiro test (normal)
+shapiro.test(residuals(l_model))
+#Breusch Pagan test (homoscedasticity)
+lmtest::bptest(l_model)
+
+```
+
+!!!!!!!!!!!!!!!!!!Tant al durbin com el shapiro test estan a la l'hipotesis alternativa, això significa que ni les dades son independents ni segueixen una distribució normal
+(Since the p-value for the normality assumption (Shapiro-Wilk) is lower than 0,05, we must reject the assumption that the populations from which samples are selected are normal. Therefore, this linear model should not be used to predict the times at 10km.)
+
+#COMPROVE EH REGARDING THE PACE OF AN AMATEUR RUNNER AND AN ELITE RUNNER
+
+In order to check how the level of professionality of each runner affect in the pace, first of all, we are going to divide the dataset into two datasets whether they are elite or amteur and  the with each dataset construct a table where the partial times fo each runners are associated with the distance runned, thus, then, making a linear regression we'll be able to see if as we think the elite runners keep a similar pace and the amateur slowly decrease the pace or not
+
+
+```{r}
+
+#female elite runners
+marathon_female_1=marathon[marathon$M.F == "1" & substr(marathon$Bib, start = 1, stop = 1) == "F",]
+#female amateur runners
+marathon_female_2=marathon[marathon$M.F == "1" & substr(marathon$Bib, start = 1, stop = 1) != "F",]
+
+#Keep only the partial times for each Group
+marathon_female_1 = subset(marathon_female_1, select=c(X5K, X10K, X15K, X20K, X25K, X30K, X35K, X40K))
+marathon_female_2 = subset(marathon_female_2, select=c(X5K, X10K, X15K, X20K, X25K, X30K, X35K, X40K))
+
+#Table for the marathon elite runners with the distance and the times
+len = nrow(marathon_female_1) 
+final_table_female_1 = data.frame(Distance_km = rep(5, len), Time_seconds = marathon_female_1$X5K)
+j=2
+#if we don't initialitze and then bind it foreach distance the we are going to retrieve just the results for the las 40km 
+for (i in seq(10, 40, by=5)){
+  table_female_1= data.frame(Distance_km = rep(i, len), Time_seconds = marathon_female_1[j])
+  names(table_female_1)[1] = "Distance_km"
+  names(table_female_1)[2] = "Time_seconds"
+  final_table_female_1 = rbind(final_table_female_1, table_female_1)
+  j=j+1
+}
+
+#Table for the marathon amateur runners with the distance and the times
+
+len = nrow(marathon_female_2) 
+final_table_female_2 = data.frame(Distance_km = rep(5, len), Time_seconds = marathon_female_2$X5K)
+j=2
+for (i in seq(10, 40, by=5)){ 
+  len = nrow(marathon_female_2)
+  table_female_2 = data.frame(Distance_km = rep(i, len), Time_seconds = marathon_female_2[j])
+  names(table_female_2)[1] = "Distance_km"
+  names(table_female_2)[2] = "Time_seconds"
+  final_table_female_2 = rbind(final_table_female_2,table_female_2)
+  j=j+1
+}
+
+```
+
+
+Check with Kolmogorov-Smirnov if follows a normal distribution or not
+
+```{r}
+#ks.test(x, y, ..., alternative = c("two.sided", "less", "greater"), exact = NULL, tol=1e-8, simulate.p.value=FALSE, B=2000)
+
+#does x and y come from the same distribution?
+#ks.test(x, y)
+
+#spark.kstest(marathon, testCol = "test",
+ # nullHypothesis = c("norm"), distParams = c(0, 1))
+
+hist(marathon_elite$Official.Time)
+```
+
+
+Linear models for each female table
+
+```{r}
+#linear regresions
+summary(lm(Time_seconds ~ Distance_km, data=final_table_female_1))
+summary(lm(Time_seconds ~ Distance_km, data=final_table_female_2))
+
+#plots of the data
+boxplot(Time_seconds ~ Distance_km, data=final_table_female_1, col=rainbow(7), xlab='Distance [km]', ylab='Time [s]')
+boxplot(Time_seconds ~ Distance_km, data=final_table_female_2, col=rainbow(7), xlab='Distance [km]', ylab='Time [s]')
+```
+
+#CHECK IF FOR EACH INDEPENDENT VARIABLE THERE ARE DIFFERENT NORMAL DISTRIBUTION
+
+```{r}
+# ANOVA for the Temperature
+anova_model = aov(Official.Time ~ Temperature, data=marathon)
+summary(anova_model) 
+boxplot(Official.Time ~ Temperature, data=marathon, col=rainbow(7), ylab='Time ', xlab='Temperature ')
+```
+
+```{r}
+# ANOVA for the Age
+marathon$Old[marathon$Age <= 40] = 0
+marathon$Old[marathon$Age > 40] = 1
+anova_model = aov(Official.Time ~ Old, data=marathon)
+summary(anova_model) 
+boxplot(Official.Time ~ Old, data=marathon, col=rainbow(7), xlab='Age', ylab='Time ', names = c("<40", ">40"))
+```
+
+```{r}
+# ANOVA for the Gender
+anova_model = aov(Official.Time ~ M.F, data=marathon)
+summary(anova_model) 
+boxplot(Official.Time ~ M.F, data=marathon, col=rainbow(7), xlab='Gender', ylab='Time', names = c("Male", "Female"))
+```
+
+```{r}
+# ANOVA for the Country
+marathon$African[marathon$Country >= 230 && marathon$Country <= 330] = 1
+marathon$African[marathon$Country <= 230 && marathon$Country >= 330] = 0
+anova_model = aov(Official.Time ~ African, data=marathon)
+summary(anova_model) 
+boxplot(Official.Time ~ M.F, data=marathon, col=rainbow(7), xlab='Nationality', ylab='Time', names = c("African", "Not African"))
+```
+
+#GET THE MEANS OF THE RESPONSES OF THE SYSTEMS FOR THE DIFFERENT FACTORS
+
+First of all we are going to divide the responses of the system in function of the values of their variables, and then get the mean foreach scenario for the elite dataset, the one we've studied during the project
+
+```{r}
+
+#including the the country variable where - are from all the countries and + are from the african country for example
+
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 0 & marathon_elite$Age < 30 & marathon_elite$Temperature <54 ] = 1
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 0 & marathon_elite$Age < 30 & marathon_elite$Temperature >= 54] = 2
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 0 & marathon_elite$Age >= 30 & marathon_elite$Temperature <54] = 3
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 0 & marathon_elite$Age >= 30 & marathon_elite$Temperature >= 54] = 4
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 1 & marathon_elite$Age < 30 & marathon_elite$Temperature <54] = 5
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 1 & marathon_elite$Age < 30 & marathon_elite$Temperature >= 54] = 6
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 1 & marathon_elite$Age >= 30 & marathon_elite$Temperature <54] = 7
+marathon_elite$Scenario[marathon_elite$Country <= 220 | marathon_elite$Country >= 380 & marathon_elite$M.F == 1 & marathon_elite$Age >= 30 & marathon_elite$Temperature >= 54] = 8
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 0 & marathon_elite$Age < 30 & marathon_elite$Temperature <54 ] = 9
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 0 & marathon_elite$Age < 30 & marathon_elite$Temperature >= 54] = 10
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 0 & marathon_elite$Age >= 30 & marathon_elite$Temperature <54] = 11
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 0 & marathon_elite$Age >= 30 & marathon_elite$Temperature >= 54] = 12
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 1 & marathon_elite$Age < 30 & marathon_elite$Temperature <54] = 13
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 1 & marathon_elite$Age < 30 & marathon_elite$Temperature >= 54] = 14
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 380 & marathon_elite$M.F == 1 & marathon_elite$Age >= 30 & marathon_elite$Temperature <54] = 15
+#l'únic valor the country per aquest scenario es 404 i si amplio fins aquest valor el parametre country llavors es menja el scenario 7, per tant direm que tant l'escenari 7 com el 15 tenen el mateix output
+marathon_elite$Scenario[marathon_elite$Country > 220 & marathon_elite$Country <= 405 & marathon_elite$M.F == 1 & marathon_elite$Age >= 30 & marathon_elite$Temperature >= 54] = 16
+
+# Get the mean for each Scenario
+boxplot(Official.Time ~ Scenario, data=marathon_elite, col=rainbow(24), xlab='Scenario', ylab='Time')
+means_real_system = aggregate(Official.Time ~ Scenario, data=marathon_elite, mean)
+
+
+```
